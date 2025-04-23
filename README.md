@@ -27,4 +27,5 @@ dotnet build -c Release
 ```
 
 Start IL2CppExtract and it will create a Output folder with multiple directory of libaries containing every static fields
+
 You can copy the `Types.bin` and the `Classes.json` from `Output/Ankama.Dofus.Protocol.Game` to the `UnityMapper` tool and it will create a json mapping of the classes
