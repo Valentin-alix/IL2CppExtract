@@ -1,0 +1,151 @@
+﻿using System.Text;
+using System.Text.Json;
+
+/*
+ * Ce script lit deux fichiers :
+ *  - Classes.json : liste ordonnée des noms de classes du protocole (JSON),
+ *  - Types.bin    : données binaires contenant les chaînes statiques de types.
+ *
+ * Il parcourt Types.bin via un BinaryReader :
+ * 1) Ignore un Int32
+ * 2) Lit un octet (longueur du nom),
+ * 3) Lit cette longueur d’octets et décode en UTF-8 pour obtenir "Namespace|NomDeClasse".
+ *
+ * Chaque type est filtré (exclusion des noms terminant par |Types ou contenant +Types),
+ * puis regroupé par "vrai namespace" extrait après ".Protocol" ou ".Protocol.Connection".
+ *
+ * Ensuite, les classes sont divisées en sous-groupes à chaque occurrence d’un nom se terminant
+ * par "Reflection", afin de conserver l’ordre logique des sous-ensembles.
+ *
+ * Pour chaque sous-groupe dans l’ordre, on aligne les noms extraits du binaire
+ * avec la portion correspondante dans la liste JSON (offset cumulatif).
+ * Cette correspondance est stockée dans un dictionnaire globalMapping :
+ *   Clé   = nom de classe JSON
+ *   Valeur= "Namespace|NomDeClasseBinaire"
+ *
+ * Enfin, on renverse l’ordre des paires et on écrit globalMapping dans
+ * Mapping.json (format JSON indenté).
+ *
+ * Le résultat permet de créer un fichier Mapping.json qui relie la définition
+ * haute-niveau des messages du protocole à leur nom effectif dans l’assembly compilé.
+ */
+
+
+// Les classes du protocol dans l'ordre du binary
+var classes = JsonSerializer.Deserialize<List<string>>(await File.ReadAllTextAsync("Classes.json"))!;
+// Le RVA Field static des strings du binary
+var typesBin = await File.ReadAllBytesAsync("Types.bin");
+
+classes.Reverse();
+
+var nss = new Dictionary<string, List<string>>();
+
+var binaryReader = new BinaryReader(new MemoryStream(typesBin));
+while (binaryReader.BaseStream.Position < binaryReader.BaseStream.Length)
+{
+    binaryReader.ReadInt32();
+    var typeLen = binaryReader.ReadByte();
+    var type = Encoding.UTF8.GetString(binaryReader.ReadBytes(typeLen));
+
+    // En vrai, on pourrait prendre ça en compte plus tard
+    if (type.EndsWith("|Types") || type.Contains("+Types"))
+    {
+        continue;
+    }
+
+    var namspc = type.Split('|')[0];
+    var c = type.Split('|')[1];
+
+    string realNs;
+
+    if (namspc.Contains(".Connection"))
+    {
+        if (namspc.Contains(".Protocol") == false)
+            continue;
+
+        realNs = namspc.Split(".Protocol")[1];
+    }
+    else
+    {
+        // we get every string after .Protocol 
+        if (namspc.Contains(".Protocol.") == false)
+            continue;
+
+        realNs = namspc.Split(".Protocol.")[1];
+    }
+
+    if (realNs.Contains('.') && nss.ContainsKey(realNs.Split('.')[0]))
+    {
+        realNs = realNs.Split('.')[0];
+    }
+    
+    if (!nss.TryGetValue(realNs, out var value))
+    {
+        value = [];
+        nss[realNs] = value;
+    }
+    
+    value.Add(c);
+}
+
+var globalGroups = new Dictionary<string, List<string>>();
+var currentGroup = string.Empty;
+
+foreach (var ns in nss)
+{
+    var group = new Dictionary<string, List<string>>();
+    foreach (var type in ns.Value)
+    {
+        var isReflection = type.EndsWith("Reflection");
+
+        if (isReflection)
+        {
+            currentGroup = type;
+        }
+        
+        if (!group.TryGetValue(currentGroup, out var value))
+        {
+            value = [];
+            group[currentGroup] = value;
+        }
+
+        value.Add(type);
+    }
+    
+    var reversedGroup = group.Reverse();
+    foreach (var g in reversedGroup)
+    {
+        if (globalGroups.TryGetValue(g.Key, out var value))
+        {
+            value.AddRange(g.Value);
+            continue;
+        }
+
+        globalGroups[g.Key] = g.Value;
+    }
+}
+
+var offset = 0;
+
+var globalMapping = new Dictionary<string, string>();
+
+foreach (var reverseOrder in globalGroups.Select(g => g.Value))
+{
+    reverseOrder.Reverse();
+    
+    var count = reverseOrder.Count;
+
+    var classOfThis = classes.Skip(offset).Take(count).ToList();
+    
+    for (var i = 0; i < count; i++)
+    {
+        globalMapping[classOfThis[i]] = reverseOrder[i];
+    }
+    
+    offset += count;
+}
+ 
+// reverse the dictionary order
+globalMapping = globalMapping.Reverse().ToDictionary(x => x.Key, x => x.Value);
+
+await File.WriteAllTextAsync("Mapping.json", JsonSerializer.Serialize(globalMapping, new JsonSerializerOptions { WriteIndented = true }));
