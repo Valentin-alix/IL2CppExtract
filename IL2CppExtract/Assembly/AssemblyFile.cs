@@ -233,6 +233,8 @@ public partial class AssemblyFile
     {
         const string outputDir = "Output";
         
+        Directory.CreateDirectory(outputDir);
+        
         File.WriteAllText(Path.Combine(outputDir, "Methods.json"), JsonSerializer.Serialize(Methods, new JsonSerializerOptions()
         {
             WriteIndented = true
