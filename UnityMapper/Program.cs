@@ -59,6 +59,7 @@ public class Mapping
 
         var nss = new Dictionary<string, List<string>>();
 
+        // get all namespaces with their all respective type inside
         var binaryReader = new BinaryReader(new MemoryStream(typesBin));
         while (binaryReader.BaseStream.Position < binaryReader.BaseStream.Length)
         {
@@ -73,11 +74,11 @@ public class Mapping
             }
 
             var namspc = type.Split('|')[0];
-            var c = type.Split('|')[1];
+            var _type = type.Split('|')[1];
 
             string realNs;
 
-            if (namspc.Contains(".Connection"))
+            if (namspc.Contains(".Server.Connection"))
             {
                 if (namspc.Contains(".Protocol") == false)
                     continue;
@@ -104,14 +105,16 @@ public class Mapping
                 nss[realNs] = value;
             }
 
-            value.Add(c);
+            value.Add(_type);
         }
 
         var globalGroups = new Dictionary<string, List<string>>();
-        var currentGroup = string.Empty;
+        var currentGroup = string.Empty; // current group (get from reflection classe)
 
+        // iterate throught all namespaces & put by namespaces name by reflection name the types insides
         foreach (var ns in nss)
         {
+            // construct by reflection name the types inside
             var group = new Dictionary<string, List<string>>();
             foreach (var type in ns.Value)
             {
@@ -131,6 +134,7 @@ public class Mapping
                 value.Add(type);
             }
 
+            // on reverse le group (jsp pk) avant de le mettre dans globalGroups
             var reversedGroup = group.Reverse();
             foreach (var g in reversedGroup)
             {
@@ -158,6 +162,7 @@ public class Mapping
 
             for (var i = 0; i < count; i++)
             {
+                //Console.WriteLine(classOfThis[i]);
                 globalMapping[classOfThis[i]] = reverseOrder[i];
             }
 
