@@ -299,7 +299,7 @@ public partial class AssemblyFile
             {
                 continue;
             }
-            
+
             classes.Add(type.FullName);
         }
 
@@ -318,11 +318,11 @@ public partial class AssemblyFile
         foreach (var rva in TypeContainer.RVAFields)
         {
             // Ici on kiff et on export tout
-            // if (!rva.FieldType.Type.Assembly.Name.Contains("Protocol"))
-            // {
+            //if (!rva.FieldType.Type.Assembly.Name.Contains("Protocol"))
+            //{
             //    continue;
-            // }
-            
+            //}
+
             var dir = Path.Combine(outputDir, rva.FieldType.Type.Assembly.Name);
 
             var buffer = rva.GetFieldRVABuffer(this);
